@@ -61,4 +61,4 @@ project_managment.iml
 /macos
 .metadata
 firebase.json
-/lib/.firebase_options.dart
+lib/firebase_options.dart
