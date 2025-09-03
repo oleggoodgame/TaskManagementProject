@@ -24,6 +24,7 @@
 //   (ref) => ProfileProvider(),
 // );
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:project_management/database/database.dart';
 import 'package:project_management/models/profile.dart';
@@ -50,6 +51,26 @@ class ProfileNotifier extends AsyncNotifier<Profile?> {
 
   Future<void> updateImage(String imageUrl) async {
     await _db.updateProfilePhoto(imageUrl);
+  }
+
+  Future<void> createOrUpdateProfile(User user) async {
+    final userId = user.uid;
+
+    final existingProfile = await _db.getProfile(userId);
+print(existingProfile);
+    if (existingProfile == null) {
+      await _db.addProfile(
+        userId,
+        "", 
+        "",
+        true, 
+        false,
+        false, 
+      );
+    }
+
+    // Після цього одразу оновлюємо state, щоб UI бачив свіжий профіль
+    state = await AsyncValue.guard(() => _db.getMyProfile());
   }
 }
 

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class ImageInput extends StatefulWidget {
   const ImageInput({
@@ -21,7 +22,16 @@ class _ImageInputState extends State<ImageInput> {
   final ImagePicker _picker = ImagePicker();
 
   Future<void> _checkPermissionsAndPick(ImageSource source) async {
-    _pickImage(source);
+     var cameraStatus = await Permission.camera.request();
+    // var storageStatus = await Permission.storage.request();
+
+    if (cameraStatus.isGranted) {
+      _pickImage(source);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Camera or Storage permission denied")),
+      );
+    }
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -46,14 +56,14 @@ class _ImageInputState extends State<ImageInput> {
       builder: (ctx) => SafeArea(
         child: Wrap(
           children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt),
-              title: const Text("Take a picture"),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                _checkPermissionsAndPick(ImageSource.camera);
-              },
-            ),
+            // ListTile(
+            //   leading: const Icon(Icons.camera_alt),
+            //   title: const Text("Take a picture"),
+            //   onTap: () {
+            //     Navigator.of(ctx).pop();
+            //     _checkPermissionsAndPick(ImageSource.camera);
+            //   },
+            // ),
             ListTile(
               leading: const Icon(Icons.photo),
               title: const Text("Choose from gallery"),

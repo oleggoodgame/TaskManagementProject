@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:project_management/data/const_inputDecoration.dart';
 import 'package:project_management/database/database.dart';
+import 'package:project_management/provider/profile_provider.dart';
 import 'package:project_management/provider/user_provider.dart';
 import 'package:project_management/screens/authentication/sign_in.dart';
 
@@ -36,10 +37,11 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
           ref.read(userDataProvider).surname,
           ref.read(userDataProvider).read,
           false,
-          false
+          false,
         );
 
         ref.watch(userDataProvider.notifier).clear();
+        ref.invalidate(profileProvider);
 
         Navigator.of(context).popUntil((route) => route.isFirst);
       } catch (e) {
@@ -119,7 +121,11 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                   ),
                   child: const Text(
                     "SIGN UP",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),

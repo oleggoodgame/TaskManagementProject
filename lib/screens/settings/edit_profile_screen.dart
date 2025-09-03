@@ -13,17 +13,18 @@ class EditProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
-  final _formKey = GlobalKey<FormState>();
+  final _profileFormKey = GlobalKey<FormState>();
+  final _passwordFormKey = GlobalKey<FormState>();
+
   late final TextEditingController _nameController;
   late final TextEditingController _surnameController;
-  late final TextEditingController _emaleController;
+  late final TextEditingController _emailController;
   final TextEditingController _oldPasswordController = TextEditingController();
   final TextEditingController _newPasswordController = TextEditingController();
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  bool _loading = false;
-
   final db = DatabaseService();
+  bool _loading = false;
 
   @override
   void initState() {
@@ -31,14 +32,14 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
     _nameController = TextEditingController();
     _surnameController = TextEditingController();
-    _emaleController = TextEditingController();
+    _emailController = TextEditingController();
 
     db.getMyProfile().then((profile) {
       if (profile != null) {
         setState(() {
           _nameController.text = profile.firstName;
           _surnameController.text = profile.lastName;
-          _emaleController.text = profile.email;
+          _emailController.text = profile.email;
         });
       }
     });
@@ -48,13 +49,48 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   void dispose() {
     _nameController.dispose();
     _surnameController.dispose();
-    _emaleController.dispose();
+    _emailController.dispose();
+    _oldPasswordController.dispose();
+    _newPasswordController.dispose();
     super.dispose();
   }
 
-  void _update() async {
-    if (_formKey.currentState!.validate()) {
-      await db.updateProfile(_nameController.text, _nameController.text);
+  void _updateProfile() async {
+    if (_profileFormKey.currentState!.validate()) {
+      await db.updateProfile(_nameController.text, _surnameController.text);
+      ref.invalidate(profileProvider);
+      Navigator.of(context).pop();
+    }
+  }
+
+  Future<void> _changePassword() async {
+    if (!_passwordFormKey.currentState!.validate()) return;
+    setState(() => _loading = true);
+    try {
+      User? user = _auth.currentUser;
+      if (user == null) return;
+
+      final credential = EmailAuthProvider.credential(
+        email: user.email!,
+        password: _oldPasswordController.text,
+      );
+      await user.reauthenticateWithCredential(credential);
+      await user.updatePassword(_newPasswordController.text);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Password changed successfully ✅")),
+        );
+        _oldPasswordController.clear();
+        _newPasswordController.clear();
+        Navigator.of(context).pop();
+      }
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: ${e.message}")));
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -89,12 +125,11 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               onPressed: () async {
                 String code = _codeController.text;
                 String? comapny = "";
-                try{
-                comapny = await db.getCompanyName(code);
-                print(comapny);
-                }
-                catch(ex){
-                   ScaffoldMessenger.of(
+                try {
+                  comapny = await db.getCompanyName(code);
+                  print(comapny);
+                } catch (ex) {
+                  ScaffoldMessenger.of(
                     context,
                   ).showSnackBar(SnackBar(content: Text("BAD INPUT CODE")));
                 }
@@ -119,207 +154,242 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     );
   }
 
-  Future<void> _changePassword() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _loading = true);
-      try {
-        User? user = _auth.currentUser;
+  Future<void> _addPasswordForGoogleUser() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
 
-        AuthCredential credential = EmailAuthProvider.credential(
-          email: user!.email!,
-          password: _oldPasswordController.text,
+    final password = _newPasswordController.text;
+    final credential = EmailAuthProvider.credential(
+      email: user.email!,
+      password: password,
+    );
+
+    setState(() => _loading = true);
+    try {
+      await user.linkWithCredential(credential);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Password added successfully ✅")),
         );
-        await user.reauthenticateWithCredential(credential);
-
-        if (_newPasswordController.text == _newPasswordController.text) {
-          await user.updatePassword(_newPasswordController.text);
-
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Password changed successfully ✅")),
-            );
-            Navigator.pop(context);
-          }
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Passwords do not match ❌")),
-          );
-        }
-      } on FirebaseAuthException catch (e) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error: ${e.message}")));
-      } finally {
-        if (mounted) setState(() => _loading = false);
+        _newPasswordController.clear();
       }
+    } on FirebaseAuthException catch (e) {
+      String message = '';
+      if (e.code == 'provider-already-linked') {
+        message = "Account already has this method.";
+      } else if (e.code == 'credential-already-in-use') {
+        message = "This email is already used by another account.";
+      } else {
+        message = e.message ?? "Unknown error";
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  // Future<void> _resetPassword() async {
-  //   try {
-  //     User? user = _auth.currentUser;
-  //     if (user?.email != null) {
-  //       await _auth.sendPasswordResetEmail(email: user!.email!);
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         const SnackBar(content: Text("Password reset email sent 📩")),
-  //       );
-  //     }
-  //   } catch (e) {
-  //     ScaffoldMessenger.of(
-  //       context,
-  //     ).showSnackBar(SnackBar(content: Text("Error: $e")));
-  //   }
-  // }
+  bool get hasPassword {
+    return _auth.currentUser?.providerData.any(
+          (p) => p.providerId == "password",
+        ) ??
+        false;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("EditProfile")),
+      appBar: AppBar(title: const Text("Edit Profile")),
       body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 30.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const SizedBox(height: 20),
-                const Text(
-                  "Personal Data",
-                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 40),
-
-                TextFormField(
-                  controller: _nameController,
-                  style: TextStyle(color: Colors.black),
-                  decoration: inputDecoration("Name"),
-                  validator: (value) => (value == null || value.isEmpty)
-                      ? 'Name is required'
-                      : null,
-                ),
-                const SizedBox(height: 20),
-
-                TextFormField(
-                  controller: _surnameController,
-                  style: TextStyle(color: Colors.black),
-                  decoration: inputDecoration("Surname"),
-                  validator: (value) => (value == null || value.isEmpty)
-                      ? 'Surname is required'
-                      : null,
-                ),
-                const SizedBox(height: 20),
-
-                TextFormField(
-                  controller: _emaleController,
-                  enabled: false,
-                  decoration: const InputDecoration(
-                    helperText: "The email address cannot be changed.",
+        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 20),
+        child: Column(
+          children: [
+            SizedBox(
+              width: double.infinity,
+              height: 55,
+              child: ElevatedButton(
+                onPressed: _showAddCompanyDialog,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-
-                const SizedBox(height: 40),
-                const Text(
-                  "Change Password",
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 20),
-
-                TextFormField(
-                  controller: _oldPasswordController,
-                  obscureText: true,
-                  decoration: inputDecoration("Old Password"),
-                  validator: (value) => (value == null || value.isEmpty)
-                      ? 'Old password is required'
-                      : null,
-                ),
-                const SizedBox(height: 20),
-
-                TextFormField(
-                  controller: _newPasswordController,
-                  obscureText: true,
-                  decoration: inputDecoration("New Password"),
-                  validator: (value) => (value == null || value.isEmpty)
-                      ? 'New password is required'
-                      : null,
-                ),
-
-                const SizedBox(height: 30),
-
-                SizedBox(
-                  width: double.infinity,
-                  height: 55,
-                  child: ElevatedButton(
-                    onPressed: _showAddCompanyDialog,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      "ADD COMPANY",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
+                child: const Text(
+                  "ADD COMPANY",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
                 ),
-                const SizedBox(height: 10),
-
-                SizedBox(
-                  width: double.infinity,
-                  height: 55,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      _update();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      "UPDATE",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                SizedBox(
-                  width: double.infinity,
-                  height: 55,
-                  child: ElevatedButton(
-                    onPressed: _loading ? null : _changePassword,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: _loading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text(
-                            "CHANGE PASSWORD",
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
+            const SizedBox(height: 10),
+            Form(
+              key: _profileFormKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Personal Data",
+                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 30),
+                  TextFormField(
+                    controller: _nameController,
+                    style: const TextStyle(color: Colors.black),
+                    decoration: inputDecoration("Name"),
+                    validator: (value) => value == null || value.isEmpty
+                        ? 'Name is required'
+                        : null,
+                  ),
+                  const SizedBox(height: 20),
+                  TextFormField(
+                    controller: _surnameController,
+                    style: const TextStyle(color: Colors.black),
+                    decoration: inputDecoration("Surname"),
+                    validator: (value) => value == null || value.isEmpty
+                        ? 'Surname is required'
+                        : null,
+                  ),
+                  const SizedBox(height: 20),
+                  TextFormField(
+                    controller: _emailController,
+                    enabled: false,
+                    style: const TextStyle(color: Colors.black),
+                    decoration: const InputDecoration(
+                      helperText: "Email cannot be changed.",
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 55,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        _updateProfile();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.black,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        "UPDATE",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 50),
+
+            Form(
+              key: _passwordFormKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Change Password",
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 20),
+                  if (hasPassword)
+                    TextFormField(
+                      controller: _oldPasswordController,
+                      obscureText: true,
+                      decoration: inputDecoration("Old Password"),
+                      validator: (value) => value == null || value.isEmpty
+                          ? 'Old password is required'
+                          : null,
+                    ),
+                  if (hasPassword) const SizedBox(height: 20),
+                  TextFormField(
+                    controller: _newPasswordController,
+                    obscureText: true,
+                    decoration: inputDecoration(
+                      hasPassword ? "New Password" : "Password",
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty || value.length < 6) {
+                        return 'Password is required (min 6 chars)';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  hasPassword
+                      ? SizedBox(
+                          width: double.infinity,
+                          height: 55,
+                          child: ElevatedButton(
+                            onPressed: _loading ? null : _changePassword,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: _loading
+                                ? const CircularProgressIndicator(
+                                    color: Colors.white,
+                                  )
+                                : Text(
+                                    hasPassword
+                                        ? "CHANGE PASSWORD"
+                                        : "ADD PASSWORD",
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                          ),
+                        )
+                      : SizedBox(
+                          width: double.infinity,
+                          height: 55,
+                          child: ElevatedButton(
+                            onPressed: _loading
+                                ? null
+                                : hasPassword
+                                ? _addPasswordForGoogleUser
+                                : _changePassword,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: _loading
+                                ? const CircularProgressIndicator(
+                                    color: Colors.white,
+                                  )
+                                : Text(
+                                    hasPassword
+                                        ? "CHANGE PASSWORD"
+                                        : "ADD PASSWORD",
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

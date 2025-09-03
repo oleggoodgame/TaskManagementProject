@@ -4,7 +4,8 @@ import 'package:project_management/models/profile.dart';
 
 class DatabaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final user = FirebaseAuth.instance.currentUser;
+
+  User? get user => FirebaseAuth.instance.currentUser;
 
   Future<void> updateProfile(String name, String surname) async {
     final userId = user?.uid;
@@ -98,19 +99,16 @@ class DatabaseService {
         .doc("profile")
         .get();
 
-    final data = doc.data() as Map<String, dynamic>;
-    final String email = user!.email!;
-    print("data[grhytrhjytjttttttttujjuyjkname");
-    print(data["name"]);
+    final data = doc.data() as Map<String, dynamic>?;
+    if (data == null) return null;
 
-    // final DateTime? birthDate = data['birthday'] != null
-    //     ? (data['birthday'] as Timestamp).toDate()
-    //     : null;
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final String? email = currentUser?.email;
 
     return Profile(
       firstName: data["name"] ?? "",
       lastName: data['surname'] ?? "",
-      email: email,
+      email: email ?? "",
       ImageUrl: data["ImageUrl"],
       employee: data["employee"] ?? false,
       employer: data["employer"] ?? false,
@@ -275,5 +273,16 @@ class DatabaseService {
         .collection("profile")
         .doc('profile')
         .set({"ImageUrl": image}, SetOptions(merge: true));
+  }
+
+  Future<bool> profileExists(String userId) async {
+    final doc = await _db
+        .collection("users")
+        .doc(userId)
+        .collection("profile")
+        .doc("profile")
+        .get();
+
+    return doc.exists;
   }
 }

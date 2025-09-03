@@ -97,6 +97,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         true,
                         true,
                       );
+                      ref.invalidate(profileProvider);
+                      Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text("Company created. ID: $companyId"),

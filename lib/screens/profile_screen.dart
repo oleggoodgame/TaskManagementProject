@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:project_management/data/data.dart';
 import 'package:project_management/models/profile.dart';
 import 'package:project_management/provider/profile_provider.dart';
@@ -98,6 +99,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           if (profile == null) {
             return const Center(child: Text("No profile found"));
           }
+          print("${profile.firstName} ${profile.lastName}");
+          print("Email: ${profile.email}");
+          print("   Employer: ${profile.employer}");
           return Padding(
             padding: const EdgeInsets.only(top: 10),
             child: Column(
@@ -171,7 +175,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(child: Text("Error: $err")),
+        error: (err, _) {
+          ref.invalidate(profileProvider);
+          return Center(child: Text("Error: $err"));
+        },
       ),
     );
   }
@@ -183,6 +190,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ).push(MaterialPageRoute(builder: (ctx) => const EditProfileScreen()));
     } else if (type == TypeProfileAction.SignOut) {
       await FirebaseAuth.instance.signOut();
+      ref.invalidate(profileProvider);
+       await GoogleSignIn.instance.signOut();
     } else if (type == TypeProfileAction.Settings) {
       Navigator.of(
         context,

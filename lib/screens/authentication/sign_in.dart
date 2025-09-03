@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:email_validator/email_validator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:project_management/data/const_inputDecoration.dart';
+import 'package:project_management/database/database.dart';
 import 'package:project_management/provider/profile_provider.dart';
 import 'package:project_management/provider/user_provider.dart';
 import 'package:project_management/screens/authentication/start_sign_up.dart';
@@ -18,6 +20,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _db = DatabaseService();
 
   Future<void> _signIn(BuildContext context, WidgetRef ref) async {
     if (_formKey.currentState!.validate()) {
@@ -31,15 +34,40 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
           email: email,
           password: password,
         );
+
         ref.watch(userDataProvider.notifier).clear();
         Navigator.of(context).popUntil((route) => route.isFirst);
-
       } catch (e) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
       }
     }
+  }
+
+  Future<UserCredential?> signInWithGoogle() async {
+    await GoogleSignIn.instance.initialize(
+      serverClientId:
+          '355245928002-v9khvp8ku397skugg626cke3dck0jfdb.apps.googleusercontent.com',
+    );
+    await GoogleSignIn.instance.signOut();
+
+    final GoogleSignInAccount? googleUser;
+    try {
+      googleUser = await GoogleSignIn.instance.authenticate();
+    } catch (ex) {
+      return null;
+    }
+    // Obtain the auth details from the request
+    final GoogleSignInAuthentication googleAuth = googleUser.authentication;
+
+    // Create a new credential
+    final credential = GoogleAuthProvider.credential(
+      idToken: googleAuth.idToken,
+    );
+
+    // Once signed in, return the UserCredential
+    return await FirebaseAuth.instance.signInWithCredential(credential);
   }
 
   @override
@@ -113,6 +141,56 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 30),
+              SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final userCredential = await signInWithGoogle();
+                    if (userCredential != null) {
+                      final user = userCredential.user;
+                      if (user != null) {
+                        print('_____________________________________');
+                        final userId = user.uid;
+                        final exists = await _db.profileExists(user.uid);
+                        if (exists == false) {
+                          await _db.addProfile(
+                            userId,
+                            "",
+                            "",
+                            false,
+                            false,
+                            false,
+                          );
+                          ref.watch(userDataProvider.notifier).clear();
+                          ref.invalidate(profileProvider);
+
+                          if (context.mounted) {
+                            Navigator.of(
+                              context,
+                            ).popUntil((route) => route.isFirst);
+                          }
+                        }
+                      }
+                    }
+                  },
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    side: const BorderSide(color: Colors.black),
+                  ),
+                  label: const Text(
+                    "Sign In with Google",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
                     ),
                   ),
                 ),
